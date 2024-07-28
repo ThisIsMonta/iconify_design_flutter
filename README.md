@@ -76,7 +76,7 @@ Feel free to open issues or submit pull requests to help improve this package.
 
 ### License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/ThisIsMonta/iconify_design_flutter/main/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/ThisIsMonta/iconify_design_flutter/blob/main/LICENSE) file for details.
 
 ### Support
 
