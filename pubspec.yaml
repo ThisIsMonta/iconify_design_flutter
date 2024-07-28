@@ -1,0 +1,22 @@
+name: iconify_design
+description: A new Flutter package project.
+version: 1.0.0
+homepage: https://github.com/ThisIsMonta/iconify_design_flutter
+
+environment:
+  sdk: '>=3.1.2 <4.0.0'
+  flutter: ">=1.17.0"
+
+dependencies:
+  dartz: ^0.10.1
+  flutter_svg: ^2.0.10+1
+  dio: ^5.5.0+1
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
