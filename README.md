@@ -15,12 +15,14 @@ and the Flutter guide for
 
 A Flutter package that allows you to use icons from the [Iconify.design](https://iconify.design/) API with ease. This package provides a widget called IconifyIcon that takes an icon string and optionally allows you to specify the size and color of the icon.
 
+![iconify-design](https://files.catbox.moe/co3anu.png)
+
 ### Installation
 Add the following to your `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  iconify_design: ^1.0.0
+  iconify_design: ^1.0.1
 ```
 Then run:
 ```sh
@@ -29,7 +31,7 @@ flutter pub get
 ### Usage
 
 ```dart
-import 'package:iconify_flutter/iconify_flutter.dart';
+import 'package:iconify_design/iconify_design.dart';
 import 'package:flutter/material.dart';
 ```
 ### Example
@@ -37,7 +39,7 @@ Here is an example of how to use the `IconifyIcon` widget:
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:iconify_flutter/iconify_flutter.dart';
+import 'package:iconify_design/iconify_design.dart';
 
 void main() {
   runApp(MyApp());

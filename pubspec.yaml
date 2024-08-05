@@ -1,6 +1,6 @@
 name: iconify_design
 description: A Flutter package that allows you to use icons from the iconify.design API with ease.
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/ThisIsMonta/iconify_design_flutter
 
 environment:
@@ -8,6 +8,7 @@ environment:
   flutter: ">=1.17.0"
 
 dependencies:
+  shared_preferences: ^2.2.3
   dartz: ^0.10.1
   flutter_svg: ^2.0.10+1
   dio: ^5.5.0+1

@@ -7,7 +7,7 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-  
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -192,7 +192,9 @@ class _TestScreenState extends State<TestScreen> {
                   ),
                   label: const Text("Reload"),
                 ),
-                const SizedBox(width: 8,),
+                const SizedBox(
+                  width: 8,
+                ),
                 IconButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey.shade700,
