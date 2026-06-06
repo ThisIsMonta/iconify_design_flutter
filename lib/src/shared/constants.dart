@@ -1,3 +1,3 @@
 const api = 'https://api.iconify.design';
 
-const DEFAULT_TIMEOUT = Duration(seconds: 30);
+const defaultTimeout = Duration(seconds: 30);

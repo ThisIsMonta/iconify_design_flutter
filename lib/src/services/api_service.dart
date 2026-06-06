@@ -6,7 +6,7 @@ class ClientService {
   final Dio dio = Dio(
     BaseOptions(
       baseUrl: '$api/',
-      receiveTimeout: DEFAULT_TIMEOUT,
+      receiveTimeout: defaultTimeout,
     ),
   );
 

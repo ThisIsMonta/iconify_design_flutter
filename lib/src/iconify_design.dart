@@ -14,12 +14,21 @@ class IconifyIcon extends StatefulWidget {
   /// The color of the icon. Default is black.
   final Color? color;
 
+  /// The widget to display while the icon is loading.
+  final Widget? placeholder;
+
+  /// The widget to display when the icon cannot be loaded.
+  final Widget? errorWidget;
+
   /// Creates an [IconifyIcon] widget.
-  const IconifyIcon(
-      {super.key,
-      required this.icon,
-      this.size = 24,
-      this.color = Colors.black});
+  const IconifyIcon({
+    super.key,
+    required this.icon,
+    this.size = 24,
+    this.color = Colors.black,
+    this.placeholder,
+    this.errorWidget,
+  });
 
   @override
   State<IconifyIcon> createState() => _IconifyIconState();
@@ -27,64 +36,71 @@ class IconifyIcon extends StatefulWidget {
 
 class _IconifyIconState extends State<IconifyIcon> {
   /// Fetches the SVG data for the icon from local cache or remote source.
-  Future getIcon() async {
+  Future<String?> getIcon() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
 
     // Check if the icon is already cached locally
     if (prefs.containsKey('icon:${widget.icon}')) {
-      return prefs.get('icon:${widget.icon}');
+      return prefs.getString('icon:${widget.icon}');
     }
 
     // Split the icon identifier into prefix and icon name
-    final prefix = widget.icon.split(":")[0];
-    final icon = widget.icon.split(":")[1];
+    final iconParts = widget.icon.split(":");
+    if (iconParts.length != 2) return null;
+
+    final prefix = iconParts[0];
+    final icon = iconParts[1];
     if (prefix.isEmpty || icon.isEmpty) return null;
 
     // Fetch the icon from the remote source
     final response = await ClientService().getRequest('$prefix/$icon.svg');
 
     // Cache the fetched icon locally and return the data
-    return response.fold((l) {
-      return null;
-    }, (r) async {
-      await prefs.setString('icon:${widget.icon}', r.data);
-      return r.data;
-    });
+    return response.fold(
+      (l) {
+        return null;
+      },
+      (r) async {
+        await prefs.setString('icon:${widget.icon}', r.data);
+        return r.data;
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
+    return FutureBuilder<String?>(
       future: getIcon(),
-      builder: (_, AsyncSnapshot<dynamic> snapshot) {
+      builder: (_, AsyncSnapshot<String?> snapshot) {
         switch (snapshot.connectionState) {
           case ConnectionState.active:
           case ConnectionState.waiting:
-            return Container(
-              width: widget.size,
-              padding: const EdgeInsets.all(2.0),
-              child: const AspectRatio(
-                aspectRatio: 1,
-                child: CircularProgressIndicator(
-                  color: Colors.black,
-                  strokeWidth: 1,
-                ),
-              ),
-            );
+            return widget.placeholder ?? _defaultPlaceholder();
           case ConnectionState.none:
             return const SizedBox.shrink();
           case ConnectionState.done:
-            if (snapshot.data == null) {
-              return const SizedBox.shrink();
+            if (snapshot.hasError || snapshot.data == null) {
+              return widget.errorWidget ?? const SizedBox.shrink();
             }
             return SvgPicture.string(
-              snapshot.data,
+              snapshot.data!,
               width: widget.size,
               height: widget.size,
-              theme: SvgTheme(currentColor: widget.color!),
+              theme: SvgTheme(currentColor: widget.color ?? Colors.black),
             );
         }
       },
+    );
+  }
+
+  Widget _defaultPlaceholder() {
+    return Container(
+      width: widget.size,
+      padding: const EdgeInsets.all(2.0),
+      child: const AspectRatio(
+        aspectRatio: 1,
+        child: CircularProgressIndicator(color: Colors.black, strokeWidth: 1),
+      ),
     );
   }
 }

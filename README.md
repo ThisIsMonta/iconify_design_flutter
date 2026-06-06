@@ -13,16 +13,16 @@ and the Flutter guide for
 
 # Iconify Design
 
-A Flutter package that allows you to use icons from the [Iconify.design](https://iconify.design/) API with ease. This package provides a widget called IconifyIcon that takes an icon string and optionally allows you to specify the size and color of the icon.
+A Flutter package that allows you to use icons from the [Iconify.design](https://iconify.design/) API with ease. This package provides a widget called IconifyIcon that takes an icon string and optionally allows you to specify the size, color, placeholder, and error widget of the icon.
 
-![iconify-design](https://files.catbox.moe/co3anu.png)
+![iconify-design](public/cover.png)
 
 ### Installation
 Add the following to your `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  iconify_design: ^1.0.1
+  iconify_design: ^1.0.2
 ```
 Then run:
 ```sh
@@ -58,6 +58,11 @@ class MyApp extends StatelessWidget {
             icon: 'mdi:home',
             size: 48.0,
             color: Colors.blue,
+            placeholder: CircularProgressIndicator(),
+            errorWidget: Icon(
+              Icons.error_outline,
+              color: Colors.red,
+            ),
           ),
         ),
       ),
@@ -70,7 +75,28 @@ class MyApp extends StatelessWidget {
 The `IconifyIcon` widget has the following parameters:
 1. **icon**: The icon string (e.g., **'mdi:home'**, **'iconoir:fill-color-solid'**, etc.).
 2. **size (optional)**: The size of the icon. Default is 24.0.
-3. **color (optional)**: The color of the icon. Default is **Black**.
+3. **color (optional)**: The color of the icon. Default is **Black**. Passing `null` also falls back to **Black**.
+4. **placeholder (optional)**: The widget to display while the icon is loading. Default is a small circular progress indicator.
+5. **errorWidget (optional)**: The widget to display when the icon cannot be loaded. Default is an empty widget.
+
+### Custom Placeholder and Error Widget
+
+You can customize the loading and error states:
+
+```dart
+IconifyIcon(
+  icon: 'mdi:home',
+  placeholder: const SizedBox(
+    width: 24,
+    height: 24,
+    child: CircularProgressIndicator(strokeWidth: 2),
+  ),
+  errorWidget: const Icon(
+    Icons.error_outline,
+    color: Colors.red,
+  ),
+)
+```
 
 ### Contribution
 
