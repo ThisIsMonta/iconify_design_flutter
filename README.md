@@ -98,6 +98,45 @@ IconifyIcon(
 )
 ```
 
+### Custom API URL
+
+You can customize the dio instance used for fetching:
+
+```dart
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:iconify_design/iconify_design.dart';
+
+void main() {
+  IconifyClientService.dio = Dio(
+    BaseOptions(
+      baseUrl: "https://iconify.yourdomain.com/", // custom iconify API base
+      receiveTimeout: Duration(duration: 60), // longer timeout than default
+    ),
+  );
+
+  runApp(MyApp());
+}
+```
+
+### Custom Cache Backend
+
+You can customize the cache backend:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:iconify_design/iconify_design.dart';
+
+void main() {
+  // in-memory cache (icons are cleared when app restarts)
+  final Map<String, String> iconCache = {};
+  IconifyClientService.cacheGet = (key) => iconCache[key];
+  IconifyClientService.cacheSet = (key, data) => iconCache[key] = data;
+
+  runApp(MyApp());
+}
+```
+
 ### Contribution
 
 Feel free to open issues or submit pull requests to help improve this package.
