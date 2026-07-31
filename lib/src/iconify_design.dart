@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:iconify_design/src/services/api_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// A widget that displays an SVG icon fetched from a remote source or local cache.
 class IconifyIcon extends StatefulWidget {
@@ -37,12 +36,11 @@ class IconifyIcon extends StatefulWidget {
 class _IconifyIconState extends State<IconifyIcon> {
   /// Fetches the SVG data for the icon from local cache or remote source.
   Future<String?> getIcon() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'icon:${widget.icon}';
 
     // Check if the icon is already cached locally
-    if (prefs.containsKey('icon:${widget.icon}')) {
-      return prefs.getString('icon:${widget.icon}');
-    }
+    final cachedIcon = await IconifyClientService.cacheGet(cacheKey);
+    if (cachedIcon != null) return cachedIcon;
 
     // Split the icon identifier into prefix and icon name
     final iconParts = widget.icon.split(":");
@@ -53,7 +51,8 @@ class _IconifyIconState extends State<IconifyIcon> {
     if (prefix.isEmpty || icon.isEmpty) return null;
 
     // Fetch the icon from the remote source
-    final response = await ClientService().getRequest('$prefix/$icon.svg');
+    final response =
+        await IconifyClientService().getRequest('$prefix/$icon.svg');
 
     // Cache the fetched icon locally and return the data
     return response.fold(
@@ -61,7 +60,7 @@ class _IconifyIconState extends State<IconifyIcon> {
         return null;
       },
       (r) async {
-        await prefs.setString('icon:${widget.icon}', r.data);
+        await IconifyClientService.cacheSet(cacheKey, r.data);
         return r.data;
       },
     );
