@@ -38,6 +38,8 @@ class _FakeCacheAdapter implements HttpClientAdapter {
 }
 
 void main() {
+  setUp(IconifyClientService.clearMemoryCache);
+
   testWidgets('renders cached icon with default color', (tester) async {
     SharedPreferences.setMockInitialValues({'icon:test:cached': _cachedSvg});
 
@@ -185,5 +187,88 @@ void main() {
     await tester.pumpAndSettle();
     expect(adapter.lastRequestOptions?.path, 'test/first.svg');
     expect(cache['icon:test:first'], _cachedSvg);
+  });
+
+  testWidgets('rebuilds neither re-fetch nor re-show the placeholder', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+    });
+    SharedPreferences.setMockInitialValues({});
+
+    const customBaseUrl = 'https://custom.example.com/';
+    final dio = Dio(BaseOptions(baseUrl: customBaseUrl));
+    final adapter = _FakeCacheAdapter(_cachedSvg);
+    dio.httpClientAdapter = adapter;
+    IconifyClientService.dio = dio;
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:rebuilt')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(adapter.requestCount, 1);
+
+    // rebuilding the same icon renders synchronously
+    // with same request count and no placeholder
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:rebuilt')),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(adapter.requestCount, 1);
+  });
+
+  testWidgets('concurrent widgets for the same icon share one request', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+    });
+    SharedPreferences.setMockInitialValues({});
+
+    final dio = Dio();
+    final adapter = _FakeCacheAdapter(_cachedSvg);
+    dio.httpClientAdapter = adapter;
+    IconifyClientService.dio = dio;
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Column(
+          children: [
+            IconifyIcon(icon: 'test:shared'),
+            IconifyIcon(icon: 'test:shared')
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsNWidgets(2));
+    expect(adapter.requestCount, 1);
+  });
+
+  test('in-memory cache evicts least-recently-used entries', () {
+    IconifyClientService.maxMemoryCacheIcons = 2;
+    addTearDown(() => IconifyClientService.maxMemoryCacheIcons = 128);
+
+    IconifyClientService.memorySet('icon:a', 'A');
+    IconifyClientService.memorySet('icon:b', 'B');
+
+    // reading 'a' makes it the most recently used
+    expect(IconifyClientService.memoryGet('icon:a'), 'A');
+
+    // 'c' evicts the least recently used entry 'b'
+    IconifyClientService.memorySet('icon:c', 'C');
+    expect(IconifyClientService.memoryGet('icon:b'), isNull);
+    expect(IconifyClientService.memoryGet('icon:a'), 'A');
+    expect(IconifyClientService.memoryGet('icon:c'), 'C');
   });
 }

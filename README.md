@@ -141,6 +141,27 @@ void main() {
 }
 ```
 
+### In-Memory Cache
+
+Icons can also be kept in an in-memory LRU cache in front of the cache backend, so repeated builds render synchronously without the loading placeholder.
+
+This is by default enabled at 128 icons, but can be edited or disabled:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:iconify_design/iconify_design.dart';
+
+void main() {
+  // max icons kept in memory (default: 128). Set to 0 to disable memory caching
+  IconifyClientService.maxMemoryCacheIcons = 256;
+
+  // clear all in-memory icons (e.g. on logout or cache invalidation)
+  IconifyClientService.clearMemoryCache();
+
+  runApp(MyApp());
+}
+```
+
 ### Contribution
 
 Feel free to open issues or submit pull requests to help improve this package.

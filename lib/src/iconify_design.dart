@@ -34,43 +34,42 @@ class IconifyIcon extends StatefulWidget {
 }
 
 class _IconifyIconState extends State<IconifyIcon> {
-  /// Fetches the SVG data for the icon from local cache or remote source.
-  Future<String?> getIcon() async {
-    final iconId = widget.icon;
-    final cacheKey = 'icon:$iconId';
+  /// Current icon id this state is resolving.
+  String _icon = '';
 
-    // Check if the icon is already cached locally
-    final cachedIcon = await IconifyClientService.cacheGet(cacheKey);
-    if (cachedIcon != null) return cachedIcon;
+  /// The future that is currently fetching the [_icon].
+  late Future<String?> _iconFuture;
 
-    // Split the icon identifier into prefix and icon name
-    final iconParts = iconId.split(":");
-    if (iconParts.length != 2) return null;
-
-    final prefix = iconParts[0];
-    final icon = iconParts[1];
-    if (prefix.isEmpty || icon.isEmpty) return null;
-
-    // Fetch the icon from the remote source
-    final response =
-        await IconifyClientService().getRequest('$prefix/$icon.svg');
-
-    // Cache the fetched icon locally and return the data
-    return response.fold(
-      (l) {
-        return null;
-      },
-      (r) async {
-        await IconifyClientService.cacheSet(cacheKey, r.data);
-        return r.data;
-      },
-    );
+  @override
+  void initState() {
+    super.initState();
+    _setIcon(widget.icon);
   }
 
   @override
+  void didUpdateWidget(IconifyIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.icon != _icon) _setIcon(widget.icon);
+  }
+
+  // Update the icon that this state is handling.
+  void _setIcon(String icon) {
+    _icon = icon;
+    _iconFuture = IconifyClientService().resolveIcon(icon);
+  }
+
+  /// Reads the icon's data from the in-memory cache.
+  String? get _memoryIcon =>
+      IconifyClientService.memoryGet(IconifyClientService.iconKey(_icon));
+
+  @override
   Widget build(BuildContext context) {
+    // return icon from memory if available
+    final memoryIcon = _memoryIcon;
+    if (memoryIcon != null) return _renderIcon(memoryIcon);
+
     return FutureBuilder<String?>(
-      future: getIcon(),
+      future: _iconFuture,
       builder: (_, AsyncSnapshot<String?> snapshot) {
         switch (snapshot.connectionState) {
           case ConnectionState.active:
@@ -82,14 +81,18 @@ class _IconifyIconState extends State<IconifyIcon> {
             if (snapshot.hasError || snapshot.data == null) {
               return widget.errorWidget ?? const SizedBox.shrink();
             }
-            return SvgPicture.string(
-              snapshot.data!,
-              width: widget.size,
-              height: widget.size,
-              theme: SvgTheme(currentColor: widget.color ?? Colors.black),
-            );
+            return _renderIcon(snapshot.data!);
         }
       },
+    );
+  }
+
+  Widget _renderIcon(String data) {
+    return SvgPicture.string(
+      data,
+      width: widget.size,
+      height: widget.size,
+      theme: SvgTheme(currentColor: widget.color ?? Colors.black),
     );
   }
 
