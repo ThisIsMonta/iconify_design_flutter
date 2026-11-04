@@ -40,6 +40,9 @@ class _IconifyIconState extends State<IconifyIcon> {
   /// The future that is currently fetching the [_icon].
   late Future<String?> _iconFuture;
 
+  /// Whether the last fetch of the current icon failed.
+  bool _hasError = false;
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +58,7 @@ class _IconifyIconState extends State<IconifyIcon> {
   // Update the icon that this state is handling.
   void _setIcon(String icon) {
     _icon = icon;
+    _hasError = false;
     _iconFuture = IconifyClientService().resolveIcon(icon);
   }
 
@@ -66,7 +70,13 @@ class _IconifyIconState extends State<IconifyIcon> {
   Widget build(BuildContext context) {
     // return icon from memory if available
     final memoryIcon = _memoryIcon;
-    if (memoryIcon != null) return _renderIcon(memoryIcon);
+    if (memoryIcon != null) {
+      _hasError = false;
+      return _renderIcon(memoryIcon);
+    }
+
+    // the icon failed to load, try to resolve it again
+    if (_hasError) _iconFuture = IconifyClientService().resolveIcon(_icon);
 
     return FutureBuilder<String?>(
       future: _iconFuture,
@@ -79,8 +89,10 @@ class _IconifyIconState extends State<IconifyIcon> {
             return const SizedBox.shrink();
           case ConnectionState.done:
             if (snapshot.hasError || snapshot.data == null) {
+              _hasError = true;
               return widget.errorWidget ?? const SizedBox.shrink();
             }
+            _hasError = false;
             return _renderIcon(snapshot.data!);
         }
       },

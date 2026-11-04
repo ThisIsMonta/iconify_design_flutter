@@ -37,6 +37,31 @@ class _FakeCacheAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// Fake cache adapter for dio that fails the first [failures] requests
+class _FlakyCacheAdapter implements HttpClientAdapter {
+  final String responseData;
+  final int failures;
+  int requestCount = 0;
+
+  _FlakyCacheAdapter(this.responseData, {required this.failures});
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    requestCount++;
+    if (requestCount <= failures) {
+      return Future.value(ResponseBody.fromString('error', 500));
+    }
+    return Future.value(ResponseBody.fromString(responseData, 200));
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   setUp(IconifyClientService.clearMemoryCache);
 
@@ -270,5 +295,65 @@ void main() {
     expect(IconifyClientService.memoryGet('icon:b'), isNull);
     expect(IconifyClientService.memoryGet('icon:a'), 'A');
     expect(IconifyClientService.memoryGet('icon:c'), 'C');
+  });
+
+  testWidgets('renders icons when the memory cache is disabled',
+      (tester) async {
+    IconifyClientService.maxMemoryCacheIcons = 0;
+    addTearDown(() => IconifyClientService.maxMemoryCacheIcons = 128);
+
+    SharedPreferences.setMockInitialValues({'icon:test:disabled': _cachedSvg});
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:disabled')),
+    );
+    await tester.pump();
+
+    // icons still render through the persistent cache while disabled
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // and nothing was written to the in-memory cache
+    // must enable memory cache to read from it
+    IconifyClientService.maxMemoryCacheIcons = 128;
+    expect(
+      IconifyClientService.memoryGet(
+        IconifyClientService.iconKey('test:disabled'),
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('retries a failed icon when the widget is rebuilt', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+    });
+    SharedPreferences.setMockInitialValues({});
+
+    final dio = Dio();
+    final adapter = _FlakyCacheAdapter(_cachedSvg, failures: 1);
+    dio.httpClientAdapter = adapter;
+    IconifyClientService.dio = dio;
+
+    // the first attempt fails and the default error widget is shown
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:retry')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsNothing);
+    expect(adapter.requestCount, 1);
+
+    // rebuilding the widget retries the request once and renders the icon
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:retry')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(adapter.requestCount, 2);
   });
 }
