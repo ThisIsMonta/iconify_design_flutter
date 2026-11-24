@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +12,29 @@ const _cachedSvg = '''
   <path fill="currentColor" d="M12 2L2 22h20L12 2z"/>
 </svg>
 ''';
+
+/// Fake cache adapter for dio to mock requests
+class _FakeCacheAdapter implements HttpClientAdapter {
+  final String responseData;
+  int requestCount = 0;
+  RequestOptions? lastRequestOptions;
+
+  _FakeCacheAdapter(this.responseData);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    requestCount++;
+    lastRequestOptions = options;
+    return Future.value(ResponseBody.fromString(responseData, 200));
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 void main() {
   testWidgets('renders cached icon with default color', (tester) async {
@@ -71,5 +97,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Icon unavailable'), findsOneWidget);
+  });
+
+  testWidgets('uses custom in-memory cache to save and load icons', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    final originalCacheGet = IconifyClientService.cacheGet;
+    final originalCacheSet = IconifyClientService.cacheSet;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+      IconifyClientService.cacheGet = originalCacheGet;
+      IconifyClientService.cacheSet = originalCacheSet;
+    });
+
+    final Map<String, String> memoryCache = {};
+    IconifyClientService.cacheGet = (key) => memoryCache[key];
+    IconifyClientService.cacheSet = (key, data) => memoryCache[key] = data;
+
+    const customBaseUrl = 'https://custom.example.com/';
+    const customTimeout = Duration(seconds: 5);
+    final dio = Dio(
+      BaseOptions(baseUrl: customBaseUrl, receiveTimeout: customTimeout),
+    );
+    final adapter = _FakeCacheAdapter(_cachedSvg);
+    dio.httpClientAdapter = adapter;
+    IconifyClientService.dio = dio;
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:custom')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(memoryCache['icon:test:custom'], isNotNull);
+    expect(memoryCache['icon:test:custom'], _cachedSvg);
+    expect(adapter.requestCount, 1);
+    expect(adapter.lastRequestOptions!.baseUrl, customBaseUrl);
+    expect(adapter.lastRequestOptions!.receiveTimeout, customTimeout);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:custom')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(adapter.requestCount, 1);
   });
 }
