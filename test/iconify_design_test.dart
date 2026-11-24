@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -145,5 +146,44 @@ void main() {
     expect(find.byType(SvgPicture), findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(adapter.requestCount, 1);
+  });
+
+  testWidgets('caches each icon under its own key after an async lookup', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    final originalCacheGet = IconifyClientService.cacheGet;
+    final originalCacheSet = IconifyClientService.cacheSet;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+      IconifyClientService.cacheGet = originalCacheGet;
+      IconifyClientService.cacheSet = originalCacheSet;
+    });
+
+    final firstLookup = Completer<String?>();
+    final cache = <String, String>{};
+    final adapter = _FakeCacheAdapter(_cachedSvg);
+    IconifyClientService.dio = Dio(BaseOptions(baseUrl: 'https://example.com/'))
+      ..httpClientAdapter = adapter;
+    IconifyClientService.cacheGet = (key) {
+      if (key == 'icon:test:first') return firstLookup.future;
+      return cache[key];
+    };
+    IconifyClientService.cacheSet = (key, data) => cache[key] = data;
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:first')),
+    );
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:second')),
+    );
+    await tester.pumpAndSettle();
+    expect(adapter.lastRequestOptions?.path, 'test/second.svg');
+    expect(cache, {'icon:test:second': _cachedSvg});
+
+    firstLookup.complete(null);
+    await tester.pumpAndSettle();
+    expect(adapter.lastRequestOptions?.path, 'test/first.svg');
+    expect(cache['icon:test:first'], _cachedSvg);
   });
 }

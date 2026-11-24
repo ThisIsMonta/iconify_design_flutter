@@ -36,14 +36,15 @@ class IconifyIcon extends StatefulWidget {
 class _IconifyIconState extends State<IconifyIcon> {
   /// Fetches the SVG data for the icon from local cache or remote source.
   Future<String?> getIcon() async {
-    final cacheKey = 'icon:${widget.icon}';
+    final iconId = widget.icon;
+    final cacheKey = 'icon:$iconId';
 
     // Check if the icon is already cached locally
     final cachedIcon = await IconifyClientService.cacheGet(cacheKey);
     if (cachedIcon != null) return cachedIcon;
 
     // Split the icon identifier into prefix and icon name
-    final iconParts = widget.icon.split(":");
+    final iconParts = iconId.split(":");
     if (iconParts.length != 2) return null;
 
     final prefix = iconParts[0];

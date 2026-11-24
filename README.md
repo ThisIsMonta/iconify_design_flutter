@@ -22,7 +22,7 @@ Add the following to your `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  iconify_design: ^1.0.2
+  iconify_design: ^1.0.3
 ```
 Then run:
 ```sh
@@ -98,9 +98,9 @@ IconifyIcon(
 )
 ```
 
-### Custom API URL
+### Custom API URL and timeout
 
-You can customize the dio instance used for fetching:
+By default, icons are fetched from `https://api.iconify.design/` with a 30-second receive timeout. To override these settings, run `flutter pub add dio` in your app and assign `IconifyClientService.dio` before `runApp`.
 
 ```dart
 import 'package:dio/dio.dart';
@@ -110,18 +110,20 @@ import 'package:iconify_design/iconify_design.dart';
 void main() {
   IconifyClientService.dio = Dio(
     BaseOptions(
-      baseUrl: "https://iconify.yourdomain.com/", // custom iconify API base
-      receiveTimeout: Duration(seconds: 60), // longer timeout than default
+      baseUrl: 'https://iconify.yourdomain.com/',
+      receiveTimeout: const Duration(seconds: 60),
     ),
   );
 
-  runApp(MyApp());
+  runApp(
+    const MaterialApp(home: Center(child: IconifyIcon(icon: 'mdi:home'))),
+  );
 }
 ```
 
 ### Custom Cache Backend
 
-You can customize the cache backend:
+Icons are cached in `SharedPreferences` by default. To use a different backend, assign both `cacheGet` and `cacheSet` before `runApp`. Both callbacks can run synchronously or return a `Future`. Return `null` from `cacheGet` when a key is missing.
 
 ```dart
 import 'package:flutter/material.dart';
@@ -133,7 +135,9 @@ void main() {
   IconifyClientService.cacheGet = (key) => iconCache[key];
   IconifyClientService.cacheSet = (key, data) => iconCache[key] = data;
 
-  runApp(MyApp());
+  runApp(
+    const MaterialApp(home: Center(child: IconifyIcon(icon: 'mdi:home'))),
+  );
 }
 ```
 
