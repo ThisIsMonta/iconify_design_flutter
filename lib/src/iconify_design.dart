@@ -34,52 +34,26 @@ class IconifyIcon extends StatefulWidget {
 }
 
 class _IconifyIconState extends State<IconifyIcon> {
-  /// Current icon id this state is resolving.
-  String _icon = '';
-
-  /// The future that is currently fetching the [_icon].
-  late Future<String?> _iconFuture;
-
-  /// Whether the last fetch of the current icon failed.
-  bool _hasError = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _setIcon(widget.icon);
-  }
+  String? _iconData;
+  Future<String?>? _iconFuture;
 
   @override
   void didUpdateWidget(IconifyIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.icon != _icon) _setIcon(widget.icon);
+    if (widget.icon != oldWidget.icon) {
+      _iconData = null;
+      _iconFuture = null;
+    }
   }
-
-  // Update the icon that this state is handling.
-  void _setIcon(String icon) {
-    _icon = icon;
-    _hasError = false;
-    _iconFuture = IconifyClientService().resolveIcon(icon);
-  }
-
-  /// Reads the icon's data from the in-memory cache.
-  String? get _memoryIcon =>
-      IconifyClientService.memoryGet(IconifyClientService.iconKey(_icon));
 
   @override
   Widget build(BuildContext context) {
-    // return icon from memory if available
-    final memoryIcon = _memoryIcon;
-    if (memoryIcon != null) {
-      _hasError = false;
-      return _renderIcon(memoryIcon);
-    }
-
-    // the icon failed to load, try to resolve it again
-    if (_hasError) _iconFuture = IconifyClientService().resolveIcon(_icon);
+    final data = _iconData ??= IconifyClientService.memoryGet(
+        IconifyClientService.iconKey(widget.icon));
+    if (data != null) return _renderIcon(data);
 
     return FutureBuilder<String?>(
-      future: _iconFuture,
+      future: _iconFuture ??= IconifyClientService().resolveIcon(widget.icon),
       builder: (_, AsyncSnapshot<String?> snapshot) {
         switch (snapshot.connectionState) {
           case ConnectionState.active:
@@ -88,11 +62,11 @@ class _IconifyIconState extends State<IconifyIcon> {
           case ConnectionState.none:
             return const SizedBox.shrink();
           case ConnectionState.done:
+            _iconFuture = null;
             if (snapshot.hasError || snapshot.data == null) {
-              _hasError = true;
               return widget.errorWidget ?? const SizedBox.shrink();
             }
-            _hasError = false;
+            _iconData = snapshot.data;
             return _renderIcon(snapshot.data!);
         }
       },

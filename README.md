@@ -22,7 +22,7 @@ Add the following to your `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  iconify_design: ^1.0.3
+  iconify_design: ^1.0.4
 ```
 Then run:
 ```sh
@@ -155,7 +155,7 @@ void main() {
   // max icons kept in memory (default: 128). Set to 0 to disable memory caching
   IconifyClientService.maxMemoryCacheIcons = 256;
 
-  // clear all in-memory icons (e.g. on logout or cache invalidation)
+  // clear the in-memory cache for subsequent lookups
   IconifyClientService.clearMemoryCache();
 
   runApp(MyApp());

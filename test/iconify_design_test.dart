@@ -240,14 +240,75 @@ void main() {
     // rebuilding the same icon renders synchronously
     // with same request count and no placeholder
     await tester.pumpWidget(
-      const MaterialApp(home: IconifyIcon(icon: 'test:rebuilt')),
+      const MaterialApp(home: IconifyIcon(icon: 'test:rebuilt', size: 25)),
     );
-    await tester.pump();
-    await tester.pump();
 
     expect(find.byType(SvgPicture), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(adapter.requestCount, 1);
+  });
+
+  testWidgets('a memory hit skips the cache backend on mount', (tester) async {
+    final originalCacheGet = IconifyClientService.cacheGet;
+    addTearDown(() => IconifyClientService.cacheGet = originalCacheGet);
+    IconifyClientService.memorySet('icon:test:warm', _cachedSvg);
+    IconifyClientService.cacheGet =
+        (_) => throw StateError('Cache unavailable');
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:warm')),
+    );
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a mounted icon stays visible after memory eviction', (
+    tester,
+  ) async {
+    final originalLimit = IconifyClientService.maxMemoryCacheIcons;
+    addTearDown(() => IconifyClientService.maxMemoryCacheIcons = originalLimit);
+    IconifyClientService.maxMemoryCacheIcons = 1;
+    IconifyClientService.memorySet('icon:test:warm', _cachedSvg);
+    SharedPreferences.setMockInitialValues({'icon:test:warm': _cachedSvg});
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:warm')),
+    );
+    await tester.pumpAndSettle();
+    IconifyClientService.memorySet('icon:test:other', _cachedSvg);
+    expect(IconifyClientService.memoryGet('icon:test:warm'), isNull);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:warm', size: 25)),
+    );
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+  });
+
+  test('clearing memory discards pending lookups for subsequent callers',
+      () async {
+    final originalCacheGet = IconifyClientService.cacheGet;
+    addTearDown(() => IconifyClientService.cacheGet = originalCacheGet);
+    final oldLookup = Completer<String?>();
+    final newLookup = Completer<String?>();
+    IconifyClientService.cacheGet = (_) => oldLookup.future;
+    final client = IconifyClientService();
+    final oldRequest = client.resolveIcon('test:pending');
+
+    IconifyClientService.clearMemoryCache();
+    IconifyClientService.cacheGet = (_) => newLookup.future;
+    final newRequest = client.resolveIcon('test:pending');
+    expect(newRequest, isNot(same(oldRequest)));
+
+    oldLookup.complete(_cachedSvg);
+    expect(await oldRequest, _cachedSvg);
+    expect(IconifyClientService.memoryGet('icon:test:pending'), isNull);
+    expect(client.resolveIcon('test:pending'), same(newRequest));
+
+    newLookup.complete(_cachedSvg);
+    expect(await newRequest, _cachedSvg);
+    expect(IconifyClientService.memoryGet('icon:test:pending'), _cachedSvg);
   });
 
   testWidgets('concurrent widgets for the same icon share one request', (
@@ -349,7 +410,7 @@ void main() {
 
     // rebuilding the widget retries the request once and renders the icon
     await tester.pumpWidget(
-      const MaterialApp(home: IconifyIcon(icon: 'test:retry')),
+      const MaterialApp(home: IconifyIcon(icon: 'test:retry', size: 25)),
     );
     await tester.pumpAndSettle();
 

@@ -44,11 +44,16 @@ class IconifyClientService {
   }
 
   static final Map<String, String> _memoryCache = {};
+  static int _cacheGeneration = 0;
 
   IconifyClientService();
 
-  /// Removes all entries from the in-memory cache.
-  static void clearMemoryCache() => _memoryCache.clear();
+  /// Clears the memory cache for subsequent icon lookups.
+  static void clearMemoryCache() {
+    _cacheGeneration++;
+    _memoryCache.clear();
+    _requestsInFlight.clear();
+  }
 
   /// Reads an icon from the in-memory cache.
   static String? memoryGet(String key) {
@@ -76,6 +81,8 @@ class IconifyClientService {
   /// Fetches an icon and caches it.
   Future<String?> resolveIcon(String icon) {
     final cacheKey = iconKey(icon);
+    final inMemory = memoryGet(cacheKey);
+    if (inMemory != null) return Future.value(inMemory);
 
     // return already running request
     final running = _requestsInFlight[cacheKey];
@@ -84,10 +91,7 @@ class IconifyClientService {
     Future<String?> fetch() async {
       // Check if the icon is already cached in a persistent cache
       final cachedIcon = await cacheGet(cacheKey);
-      if (cachedIcon != null) {
-        memorySet(cacheKey, cachedIcon);
-        return cachedIcon;
-      }
+      if (cachedIcon != null) return cachedIcon;
 
       // Split the icon identifier into prefix and icon name
       final iconParts = icon.split(":");
@@ -107,16 +111,21 @@ class IconifyClientService {
         },
         (r) async {
           await cacheSet(cacheKey, r.data);
-          memorySet(cacheKey, r.data);
           return r.data;
         },
       );
     }
 
-    final request = fetch().whenComplete(() {
-      _requestsInFlight.remove(cacheKey);
+    final generation = _cacheGeneration;
+    final request = fetch().then((data) {
+      if (generation == _cacheGeneration && data != null) {
+        memorySet(cacheKey, data);
+      }
+      return data;
+    }).whenComplete(() {
+      if (generation == _cacheGeneration) _requestsInFlight.remove(cacheKey);
     });
-    _requestsInFlight[cacheKey] = request;
+    if (generation == _cacheGeneration) _requestsInFlight[cacheKey] = request;
     return request;
   }
 
