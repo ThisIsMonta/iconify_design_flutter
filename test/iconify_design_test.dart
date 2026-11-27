@@ -37,7 +37,34 @@ class _FakeCacheAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// Fake cache adapter for dio that fails the first [failures] requests
+class _FlakyCacheAdapter implements HttpClientAdapter {
+  final String responseData;
+  final int failures;
+  int requestCount = 0;
+
+  _FlakyCacheAdapter(this.responseData, {required this.failures});
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    requestCount++;
+    if (requestCount <= failures) {
+      return Future.value(ResponseBody.fromString('error', 500));
+    }
+    return Future.value(ResponseBody.fromString(responseData, 200));
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
+  setUp(IconifyClientService.clearMemoryCache);
+
   testWidgets('renders cached icon with default color', (tester) async {
     SharedPreferences.setMockInitialValues({'icon:test:cached': _cachedSvg});
 
@@ -185,5 +212,209 @@ void main() {
     await tester.pumpAndSettle();
     expect(adapter.lastRequestOptions?.path, 'test/first.svg');
     expect(cache['icon:test:first'], _cachedSvg);
+  });
+
+  testWidgets('rebuilds neither re-fetch nor re-show the placeholder', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+    });
+    SharedPreferences.setMockInitialValues({});
+
+    const customBaseUrl = 'https://custom.example.com/';
+    final dio = Dio(BaseOptions(baseUrl: customBaseUrl));
+    final adapter = _FakeCacheAdapter(_cachedSvg);
+    dio.httpClientAdapter = adapter;
+    IconifyClientService.dio = dio;
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:rebuilt')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(adapter.requestCount, 1);
+
+    // rebuilding the same icon renders synchronously
+    // with same request count and no placeholder
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:rebuilt', size: 25)),
+    );
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(adapter.requestCount, 1);
+  });
+
+  testWidgets('a memory hit skips the cache backend on mount', (tester) async {
+    final originalCacheGet = IconifyClientService.cacheGet;
+    addTearDown(() => IconifyClientService.cacheGet = originalCacheGet);
+    IconifyClientService.memorySet('icon:test:warm', _cachedSvg);
+    IconifyClientService.cacheGet =
+        (_) => throw StateError('Cache unavailable');
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:warm')),
+    );
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a mounted icon stays visible after memory eviction', (
+    tester,
+  ) async {
+    final originalLimit = IconifyClientService.maxMemoryCacheIcons;
+    addTearDown(() => IconifyClientService.maxMemoryCacheIcons = originalLimit);
+    IconifyClientService.maxMemoryCacheIcons = 1;
+    IconifyClientService.memorySet('icon:test:warm', _cachedSvg);
+    SharedPreferences.setMockInitialValues({'icon:test:warm': _cachedSvg});
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:warm')),
+    );
+    await tester.pumpAndSettle();
+    IconifyClientService.memorySet('icon:test:other', _cachedSvg);
+    expect(IconifyClientService.memoryGet('icon:test:warm'), isNull);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:warm', size: 25)),
+    );
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+  });
+
+  test('clearing memory discards pending lookups for subsequent callers',
+      () async {
+    final originalCacheGet = IconifyClientService.cacheGet;
+    addTearDown(() => IconifyClientService.cacheGet = originalCacheGet);
+    final oldLookup = Completer<String?>();
+    final newLookup = Completer<String?>();
+    IconifyClientService.cacheGet = (_) => oldLookup.future;
+    final client = IconifyClientService();
+    final oldRequest = client.resolveIcon('test:pending');
+
+    IconifyClientService.clearMemoryCache();
+    IconifyClientService.cacheGet = (_) => newLookup.future;
+    final newRequest = client.resolveIcon('test:pending');
+    expect(newRequest, isNot(same(oldRequest)));
+
+    oldLookup.complete(_cachedSvg);
+    expect(await oldRequest, _cachedSvg);
+    expect(IconifyClientService.memoryGet('icon:test:pending'), isNull);
+    expect(client.resolveIcon('test:pending'), same(newRequest));
+
+    newLookup.complete(_cachedSvg);
+    expect(await newRequest, _cachedSvg);
+    expect(IconifyClientService.memoryGet('icon:test:pending'), _cachedSvg);
+  });
+
+  testWidgets('concurrent widgets for the same icon share one request', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+    });
+    SharedPreferences.setMockInitialValues({});
+
+    final dio = Dio();
+    final adapter = _FakeCacheAdapter(_cachedSvg);
+    dio.httpClientAdapter = adapter;
+    IconifyClientService.dio = dio;
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Column(
+          children: [
+            IconifyIcon(icon: 'test:shared'),
+            IconifyIcon(icon: 'test:shared')
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsNWidgets(2));
+    expect(adapter.requestCount, 1);
+  });
+
+  test('in-memory cache evicts least-recently-used entries', () {
+    IconifyClientService.maxMemoryCacheIcons = 2;
+    addTearDown(() => IconifyClientService.maxMemoryCacheIcons = 128);
+
+    IconifyClientService.memorySet('icon:a', 'A');
+    IconifyClientService.memorySet('icon:b', 'B');
+
+    // reading 'a' makes it the most recently used
+    expect(IconifyClientService.memoryGet('icon:a'), 'A');
+
+    // 'c' evicts the least recently used entry 'b'
+    IconifyClientService.memorySet('icon:c', 'C');
+    expect(IconifyClientService.memoryGet('icon:b'), isNull);
+    expect(IconifyClientService.memoryGet('icon:a'), 'A');
+    expect(IconifyClientService.memoryGet('icon:c'), 'C');
+  });
+
+  testWidgets('renders icons when the memory cache is disabled',
+      (tester) async {
+    IconifyClientService.maxMemoryCacheIcons = 0;
+    addTearDown(() => IconifyClientService.maxMemoryCacheIcons = 128);
+
+    SharedPreferences.setMockInitialValues({'icon:test:disabled': _cachedSvg});
+
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:disabled')),
+    );
+    await tester.pump();
+
+    // icons still render through the persistent cache while disabled
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // and nothing was written to the in-memory cache
+    // must enable memory cache to read from it
+    IconifyClientService.maxMemoryCacheIcons = 128;
+    expect(
+      IconifyClientService.memoryGet(
+        IconifyClientService.iconKey('test:disabled'),
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('retries a failed icon when the widget is rebuilt', (
+    tester,
+  ) async {
+    final originalDio = IconifyClientService.dio;
+    addTearDown(() {
+      IconifyClientService.dio = originalDio;
+    });
+    SharedPreferences.setMockInitialValues({});
+
+    final dio = Dio();
+    final adapter = _FlakyCacheAdapter(_cachedSvg, failures: 1);
+    dio.httpClientAdapter = adapter;
+    IconifyClientService.dio = dio;
+
+    // the first attempt fails and the default error widget is shown
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:retry')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsNothing);
+    expect(adapter.requestCount, 1);
+
+    // rebuilding the widget retries the request once and renders the icon
+    await tester.pumpWidget(
+      const MaterialApp(home: IconifyIcon(icon: 'test:retry', size: 25)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(adapter.requestCount, 2);
   });
 }

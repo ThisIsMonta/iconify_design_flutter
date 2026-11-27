@@ -34,43 +34,26 @@ class IconifyIcon extends StatefulWidget {
 }
 
 class _IconifyIconState extends State<IconifyIcon> {
-  /// Fetches the SVG data for the icon from local cache or remote source.
-  Future<String?> getIcon() async {
-    final iconId = widget.icon;
-    final cacheKey = 'icon:$iconId';
+  String? _iconData;
+  Future<String?>? _iconFuture;
 
-    // Check if the icon is already cached locally
-    final cachedIcon = await IconifyClientService.cacheGet(cacheKey);
-    if (cachedIcon != null) return cachedIcon;
-
-    // Split the icon identifier into prefix and icon name
-    final iconParts = iconId.split(":");
-    if (iconParts.length != 2) return null;
-
-    final prefix = iconParts[0];
-    final icon = iconParts[1];
-    if (prefix.isEmpty || icon.isEmpty) return null;
-
-    // Fetch the icon from the remote source
-    final response =
-        await IconifyClientService().getRequest('$prefix/$icon.svg');
-
-    // Cache the fetched icon locally and return the data
-    return response.fold(
-      (l) {
-        return null;
-      },
-      (r) async {
-        await IconifyClientService.cacheSet(cacheKey, r.data);
-        return r.data;
-      },
-    );
+  @override
+  void didUpdateWidget(IconifyIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.icon != oldWidget.icon) {
+      _iconData = null;
+      _iconFuture = null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final data = _iconData ??= IconifyClientService.memoryGet(
+        IconifyClientService.iconKey(widget.icon));
+    if (data != null) return _renderIcon(data);
+
     return FutureBuilder<String?>(
-      future: getIcon(),
+      future: _iconFuture ??= IconifyClientService().resolveIcon(widget.icon),
       builder: (_, AsyncSnapshot<String?> snapshot) {
         switch (snapshot.connectionState) {
           case ConnectionState.active:
@@ -79,17 +62,23 @@ class _IconifyIconState extends State<IconifyIcon> {
           case ConnectionState.none:
             return const SizedBox.shrink();
           case ConnectionState.done:
+            _iconFuture = null;
             if (snapshot.hasError || snapshot.data == null) {
               return widget.errorWidget ?? const SizedBox.shrink();
             }
-            return SvgPicture.string(
-              snapshot.data!,
-              width: widget.size,
-              height: widget.size,
-              theme: SvgTheme(currentColor: widget.color ?? Colors.black),
-            );
+            _iconData = snapshot.data;
+            return _renderIcon(snapshot.data!);
         }
       },
+    );
+  }
+
+  Widget _renderIcon(String data) {
+    return SvgPicture.string(
+      data,
+      width: widget.size,
+      height: widget.size,
+      theme: SvgTheme(currentColor: widget.color ?? Colors.black),
     );
   }
 

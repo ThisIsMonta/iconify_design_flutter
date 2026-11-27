@@ -22,7 +22,7 @@ Add the following to your `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  iconify_design: ^1.0.3
+  iconify_design: ^1.0.4
 ```
 Then run:
 ```sh
@@ -140,6 +140,27 @@ void main() {
   );
 }
 ```
+
+### In-Memory Cache
+
+Icons are kept in a least-recently-used (LRU) memory cache ahead of the configured cache backend. A memory hit displays the icon without a loading placeholder. An already loaded widget keeps displaying the same icon across rebuilds, even if its cache entry is evicted.
+
+The memory cache holds up to 128 icons by default. Set `IconifyClientService.maxMemoryCacheIcons` before `runApp` to change the limit, or set it to `0` to disable memory caching.
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:iconify_design/iconify_design.dart';
+
+void main() {
+  IconifyClientService.maxMemoryCacheIcons = 256;
+
+  runApp(
+    const MaterialApp(home: Center(child: IconifyIcon(icon: 'mdi:home'))),
+  );
+}
+```
+
+Call `IconifyClientService.clearMemoryCache()` to empty the memory cache. Later lookups can still read from the configured cache backend.
 
 ### Contribution
 

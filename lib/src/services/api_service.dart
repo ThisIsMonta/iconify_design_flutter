@@ -14,6 +14,11 @@ class IconifyClientService {
     ),
   );
 
+  /// Returns the cache key for a specific icon.
+  static String iconKey(String icon) {
+    return 'icon:$icon';
+  }
+
   /// Override the cache get function to provide a custom cache backend.
   /// Also override [IconifyClientService.cacheSet]
   static FutureOr<String?> Function(String key) cacheGet = _defaultCacheGetter;
@@ -27,12 +32,102 @@ class IconifyClientService {
   /// Also override [IconifyClientService.cacheGet]
   static FutureOr<void> Function(String key, String data) cacheSet =
       _defaultCacheSetter;
+
+  /// Maximum number of icons to keep in the in-memory cache.
+  /// Set to 0 to disable memory caching entirely.
+  /// The in-memory cache returns before any other backend (including custom cache).
+  static int maxMemoryCacheIcons = 128;
+
   static Future<void> _defaultCacheSetter(String key, String data) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(key, data);
   }
 
+  static final Map<String, String> _memoryCache = {};
+  static int _cacheGeneration = 0;
+
   IconifyClientService();
+
+  /// Clears the memory cache for subsequent icon lookups.
+  static void clearMemoryCache() {
+    _cacheGeneration++;
+    _memoryCache.clear();
+    _requestsInFlight.clear();
+  }
+
+  /// Reads an icon from the in-memory cache.
+  static String? memoryGet(String key) {
+    if (maxMemoryCacheIcons <= 0) return null;
+    // remove and reinsert so least-recently-used entries stay at the start
+    final data = _memoryCache.remove(key);
+    if (data != null) _memoryCache[key] = data;
+    return data;
+  }
+
+  /// Writes an icon to the in-memory cache.
+  static void memorySet(String key, String data) {
+    if (maxMemoryCacheIcons <= 0) return;
+    _memoryCache.remove(key);
+    // evict the least-recently-used entries above the max
+    while (_memoryCache.length >= maxMemoryCacheIcons) {
+      _memoryCache.remove(_memoryCache.keys.first);
+    }
+    _memoryCache[key] = data;
+  }
+
+  /// Outbound icon requests that are currently resolving.
+  static final Map<String, Future<String?>> _requestsInFlight = {};
+
+  /// Fetches an icon and caches it.
+  Future<String?> resolveIcon(String icon) {
+    final cacheKey = iconKey(icon);
+    final inMemory = memoryGet(cacheKey);
+    if (inMemory != null) return Future.value(inMemory);
+
+    // return already running request
+    final running = _requestsInFlight[cacheKey];
+    if (running != null) return running;
+
+    Future<String?> fetch() async {
+      // Check if the icon is already cached in a persistent cache
+      final cachedIcon = await cacheGet(cacheKey);
+      if (cachedIcon != null) return cachedIcon;
+
+      // Split the icon identifier into prefix and icon name
+      final iconParts = icon.split(":");
+      if (iconParts.length != 2) return null;
+
+      final prefix = iconParts[0];
+      final iconName = iconParts[1];
+      if (prefix.isEmpty || iconName.isEmpty) return null;
+
+      // Fetch the icon from the remote source
+      final response = await getRequest('$prefix/$iconName.svg');
+
+      // Cache the fetched icon locally and return the data
+      return response.fold(
+        (l) {
+          return null;
+        },
+        (r) async {
+          await cacheSet(cacheKey, r.data);
+          return r.data;
+        },
+      );
+    }
+
+    final generation = _cacheGeneration;
+    final request = fetch().then((data) {
+      if (generation == _cacheGeneration && data != null) {
+        memorySet(cacheKey, data);
+      }
+      return data;
+    }).whenComplete(() {
+      if (generation == _cacheGeneration) _requestsInFlight.remove(cacheKey);
+    });
+    if (generation == _cacheGeneration) _requestsInFlight[cacheKey] = request;
+    return request;
+  }
 
   Future<Either<DioException, Response>> getRequest(String endpoint) async {
     try {

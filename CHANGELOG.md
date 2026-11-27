@@ -1,3 +1,8 @@
+## 1.0.4
+
+* Added a configurable in-memory icon cache and shared in-flight lookups. ([#5](https://github.com/ThisIsMonta/iconify_design_flutter/pull/5))
+* Kept mounted icons visible across rebuilds and prevented pending lookups from refilling a cleared memory cache.
+
 ## 1.0.3
 
 * Added support for a custom API URL, receive timeout, and cache backend. ([#4](https://github.com/ThisIsMonta/iconify_design_flutter/pull/4))
