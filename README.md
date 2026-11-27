@@ -143,24 +143,24 @@ void main() {
 
 ### In-Memory Cache
 
-Icons can also be kept in an in-memory LRU cache in front of the cache backend, so repeated builds render synchronously without the loading placeholder.
+Icons are kept in a least-recently-used (LRU) memory cache ahead of the configured cache backend. A memory hit displays the icon without a loading placeholder. An already loaded widget keeps displaying the same icon across rebuilds, even if its cache entry is evicted.
 
-This is by default enabled at 128 icons, but can be edited or disabled:
+The memory cache holds up to 128 icons by default. Set `IconifyClientService.maxMemoryCacheIcons` before `runApp` to change the limit, or set it to `0` to disable memory caching.
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:iconify_design/iconify_design.dart';
 
 void main() {
-  // max icons kept in memory (default: 128). Set to 0 to disable memory caching
   IconifyClientService.maxMemoryCacheIcons = 256;
 
-  // clear the in-memory cache for subsequent lookups
-  IconifyClientService.clearMemoryCache();
-
-  runApp(MyApp());
+  runApp(
+    const MaterialApp(home: Center(child: IconifyIcon(icon: 'mdi:home'))),
+  );
 }
 ```
+
+Call `IconifyClientService.clearMemoryCache()` to empty the memory cache. Later lookups can still read from the configured cache backend.
 
 ### Contribution
 
